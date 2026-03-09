@@ -1,0 +1,134 @@
+1.	Performance Issues: Identify potential performance problems if this database has 1M+ customers, 10M+ orders, and 50M+ order items
+	a. 	Slow JOIN Operations
+		Foreign keys do not automatically create indexes in PostgreSQL.
+		Without indexes on:
+		orders.customer_id
+		order_items.order_id
+		order_items.product_id
+		JOIN queries will require scanning millions of rows, which makes them slow.
+
+	b. 	Slow Date Filtering
+		Many reports filter by date, for example:
+		Monthly revenue
+		Cohort analysis
+		90-day trends
+		Without an index on orders.order_date, the database must scan all 10M orders before filtering. This causes slow query performance.
+
+	c.  Heavy Aggregation on Large Tables
+		The order_items table has 50M+ rows.
+		Queries that calculate:
+		Total revenue
+		Product performance
+		Inventory analysis
+		Will require scanning and grouping millions of rows, which increases memory and disk usage.
+
+	d. 	No Partitioning for Time-Based Data
+		Orders are time-series data.
+		Without partitioning:
+		Queries must scan the entire table.
+		Indexes become very large.
+		Maintenance operations (VACUUM, ANALYZE) become slower.
+
+	e. 	Data Redundancy in total_amount
+		The total_amount column stores data that can be calculated from order_items.
+		If not maintained properly, it can cause:
+		Data inconsistency
+		Incorrect financial reports
+		Extra update cost when order items change
+
+	Summary
+		At small scale, this schema works well.
+		At large scale, missing indexes, large aggregations, and lack of partitioning can cause:
+		Slow JOINs
+		Slow reporting queries
+		High memory and disk usage
+		Maintenance challenges
+		Proper indexing and schema improvements are required for scalability.
+		
+		
+2.	Index Recommendations: Suggest 5 indexes that would improve common query patterns (explain your reasoning)
+	a. 	Index on orders(customer_id)
+		"CREATE INDEX idx_orders_customer_id ON orders(customer_id);"
+		Reason:
+		Many queries join customers and orders to analyze customer behavior (e.g., RFM, order history).
+		This index speeds up JOIN operations and filtering by customer.
+
+	b. 	Composite Index on orders(customer_id, order_date)
+		"CREATE INDEX idx_orders_customer_date ON orders(customer_id, order_date);"
+		Reason:
+		Useful for queries that filter by both customer and date, such as retention analysis and repeat purchase tracking.
+		This index improves performance when searching orders within a specific time range for each customer.
+
+	c. 	Index on orders(order_date)
+		"CREATE INDEX idx_orders_order_date ON orders(order_date);"
+		Reason:
+		Most reports filter by date (monthly revenue, trends, last 90 days).
+		This index prevents full table scans on 10M+ orders when filtering by date.
+
+	e. 	Index on order_items(order_id)
+		"CREATE INDEX idx_order_items_order_id ON order_items(order_id);"
+		Reason:
+		Speeds up JOIN between orders and order_items.
+		Important for revenue calculations and order-level aggregations.
+
+	f. 	Index on order_items(product_id)
+		"CREATE INDEX idx_order_items_product_id ON order_items(product_id);"
+		Reason:
+		Improves product performance reporting and category-level analysis.
+		Essential when calculating total sales per product.
+
+	Summary
+		These indexes improve:
+		JOIN performance
+		Date filtering
+		Revenue aggregation
+		Customer behavior analysis
+		Product performance reporting
+		Without these indexes, queries on large datasets (10M–50M rows) would require full table scans and become slow.
+		
+
+3.	Schema Improvements: Suggest 2-3 improvements to this schema design
+	a. 	Partition the orders Table by Booking Date
+		In a hotel system, orders represent bookings and are time-based data.
+		Partition the table by order_date (monthly or yearly).
+		Why:
+		Improves performance for time-based reports (monthly revenue, seasonal trends).
+		Reduces table and index size per partition.
+		Makes archiving old booking data easier.
+		Scales better when bookings grow to 50M+ rows.
+	b.  Normalize the category Column in Products
+		Currently:
+		category VARCHAR(100)
+		In a hotel context, categories may represent:
+		Room
+		Spa
+		Dining
+		Event
+		Tour Package
+		Instead of storing category as text, create a separate categories table and use category_id as a foreign key.
+		Why:
+		Prevents inconsistent values (e.g., "Spa" vs "spa").
+		Improves data integrity.
+		Reduces duplicated text storage.
+		Makes revenue reporting per service category more efficient.
+	c. 	Improve Data Integrity for total_amount
+		In a hotel system, a booking (orders) may include:
+		Room nights
+		Spa services
+		Dining packages
+		Extra services
+		The total_amount is derived from order_items.
+		Improvements:
+		Either calculate total dynamically from order_items, OR
+		Use a database trigger to automatically update total_amount.
+		Why:
+		Prevents billing inconsistencies.
+		Ensures financial accuracy.
+		Avoids manual reconciliation errors.
+	
+	Summary
+	To make this hotel booking system scalable:
+	Partition booking data by date.
+	Normalize service categories.
+	Ensure booking totals remain consistent.
+	These changes improve performance, scalability, and financial reliability at large scale.
